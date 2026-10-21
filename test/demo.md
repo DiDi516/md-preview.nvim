@@ -135,6 +135,19 @@ pie title 语言分布
   "Rust" : 25
 ```
 
+## 图片与徽章
+
+shields.io 徽章会转成彩色标签（连续徽章自动排在一行）：
+
+[![Neovim](https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white)](https://neovim.io)
+[![Lua](https://img.shields.io/badge/Lua-LuaJIT-2C2D72?logo=lua&logoColor=white)](https://luajit.org)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%2F%20Linux%20%2F%20macOS-lightgrey)]()
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+普通图片（终端无法显示位图，按 image_mode 降级）：
+
+![架构示意图](https://example.com/assets/architecture.png)
+
 ## 脚注
 
 这里有一个脚注引用[^note]。

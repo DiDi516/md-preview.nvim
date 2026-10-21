@@ -79,6 +79,15 @@
    │           │           │
 ```
 
+**图片与徽章**：shields.io 徽章渲染成两段配色的彩色标签，连续徽章合并到同一行；
+普通位图终端显示不了，降级为 `▣` + alt：
+
+```
+Neovim 0.9+  Lua LuaJIT  platform Windows / Linux / macOS  license MIT 
+
+▣ 架构示意图
+```
+
 **数学公式**：行内 `$E = mc^2$` → `E = mc²`；块级公式居中，矩阵用框线渲染：
 
 ```
@@ -103,6 +112,7 @@
 - **中文按显示宽度对齐**——表格、列表缩进、代码块边框都不会错位
 - **代码词法着色**——内置 20+ 语言（Lua / Python / JS / TS / Rust / Go / Java / C / C++ …）
 - **数学公式**——LaTeX → Unicode：希腊字母、∑ ∫ ∞、上标下标、分式、根号、矩阵
+- **徽章渲染**——shields.io / badgen 徽章还原成两段配色的彩色标签，连续徽章合并成一行
 - **Mermaid**——flowchart（TD / LR）与时序图渲染为字符画，其他类型降级为标注块
 - **一键导出**——导出自包含 HTML，与预览内容完全一致（共用同一棵 AST）
 - **不占用任何按键**——只提供命令，避免抢占既有肌肉记忆
@@ -214,6 +224,7 @@ require("md-preview").setup({
 
   -- 渲染
   show_url = false,          -- 链接后是否附加 URL 文本
+  image_mode = "auto",       -- 图片呈现方式，见下表
   image_icon = "▣",          -- 图片占位图标
   code_lang_label = true,    -- 代码块顶部显示语言名
   code_line_numbers = false, -- 代码块行号
@@ -236,6 +247,23 @@ require("md-preview").setup({
   },
 })
 ```
+
+### 图片与徽章（`image_mode`）
+
+终端显示不了位图，所以图片按 `image_mode` 降级：
+
+| 取值 | 行为 |
+|---|---|
+| `auto`（默认） | 认得出 shields.io / badgen 徽章 → 渲染成**彩色标签**；认不出 → 用 `image_icon` 占位 |
+| `badge` | 只认徽章，其余图片直接不显示 |
+| `icon` | 一律显示 `▣ alt`（不做徽章识别） |
+| `alt` | 只显示 alt 文本，不带图标 |
+| `hide` | 图片完全不出现 |
+
+徽章按 URL 规格 `<label>-<message>-<color>` 解析，还原成**两段配色**的色块
+（左侧灰色标签 + 右侧徽章色），并按背景亮度自动选深/浅前景色。
+连续写在同一段的多个徽章会合并排到同一行——源码里每个徽章占一行也不会拆开。
+徽章是「原子块」，窄窗口下整体挪到下一行，不会从中间被截断。
 
 ### 自定义配色
 
@@ -270,6 +298,8 @@ require("md-preview").setup({
 | 数学 `$...$` `$$...$$` | LaTeX → Unicode（∑ ∫ α ² ₁ 等） |
 | Mermaid | flowchart、时序图渲染为字符画 |
 | 脚注 / front matter | 黄色标记 / 暗色原样 |
+| 图片 | `▣ alt` 占位（可用 `image_mode` 改为只显示 alt 或隐藏） |
+| shields.io / badgen 徽章 | 两段配色的彩色标签，连续徽章合并成一行 |
 
 想快速看全部效果，打开 `test/demo.md` 后执行 `:MdPreviewToggle`。
 
@@ -316,7 +346,7 @@ lua/md-preview/
 | 启动 | 起 HTTP 服务 | 直接开 buffer |
 | 跨机器复现 | 需重装依赖 | 拷目录即用 |
 | 粗体 / 斜体 | 真字体 | 依赖终端能力 |
-| 图片 | 可显示 | 占位符（终端硬限制） |
+| 图片 | 可显示 | 占位符（终端硬限制）；徽章可还原成彩色标签 |
 | Mermaid | 矢量图 | 字符画 |
 
 ---
@@ -340,7 +370,8 @@ nvim --headless -c "set columns=180 lines=60" -c "luafile test/check_readme.lua"
 
 ## 已知限制
 
-1. **图片无法在终端显示**，渲染为 `▣ alt` 占位符。
+1. **位图无法在终端显示**，渲染为 `▣ alt` 占位符（可用 `image_mode` 改为只显示 alt 或隐藏）。
+   shields.io / badgen 徽章是例外——它们本质是「带颜色的文字」，可还原成彩色标签。
 2. **粗体 / 斜体 / 删除线依赖终端能力**。不支持时可在 `attrs` 中关掉，退化为纯颜色区分。
 3. **Mermaid 仅支持 flowchart 与 sequenceDiagram**，其余类型（classDiagram / gantt / pie 等）
    降级为标注块并保留源码，不丢信息。

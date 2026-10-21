@@ -437,6 +437,45 @@ local function match_fence(line)
   return nil
 end
 
+--- 取字符串的最后一个「字符」（按 UTF-8，而非最后一个字节）
+local function last_char(s)
+  local c = ""
+  for _cp, st, nb in util.chars(s) do c = s:sub(st, st + nb - 1) end
+  return c
+end
+
+--- 取字符串去掉前导空白后的第一个「字符」
+local function first_char(s)
+  local t = s:match("^%s*(.*)$")
+  local cp, st, nb = util.chars(t)()
+  if not cp then return "" end
+  return t:sub(st, st + nb - 1)
+end
+
+--- 合并段落内的多行（软换行处理）
+---
+--- CommonMark 规定段落内的单个换行是「软换行」，渲染时不产生硬换行，
+--- 等价于一个空格。但中文等全角字符之间不该凭空多出空格，所以按两侧字符决定：
+---   · 两侧都是全角（中文/全角标点）→ 直接相连，不插空格
+---   · 其余（英文单词、中英混排、标点后）→ 插一个空格
+---
+--- 注意：这里刻意不往正文里塞 "\n"。渲染层的 "\n" 只表示硬换行（行尾双空格 / <br>），
+--- 软换行若也用 "\n" 会让每个源码行各占一行，徽章等行内元素就无法合并排版。
+local function join_soft(lines)
+  local out = {}
+  for i, l in ipairs(lines) do
+    out[#out + 1] = l
+    if i < #lines then
+      local prev = last_char(l)
+      local nxt = first_char(lines[i + 1])
+      local both_fullwidth = prev ~= "" and nxt ~= ""
+        and util.width(prev) == 2 and util.width(nxt) == 2
+      if not both_fullwidth then out[#out + 1] = " " end
+    end
+  end
+  return table.concat(out)
+end
+
 --- 缩进宽度（按显示宽度换算，tab = 4）
 local function indent_width(s)
   local ind = s:match("^(%s*)") or ""
@@ -721,7 +760,7 @@ local function parse_blocks(lines, refs, linemap)
           para[#para + 1] = l
           blocks[#blocks + 1] = {
             t = "heading", level = 1, src_line = start_src,
-            inline = M.parse_inline(table.concat(para, "\n"), refs),
+            inline = M.parse_inline(join_soft(para), refs),
           }
           i = i + 2
           goto cont
@@ -729,7 +768,7 @@ local function parse_blocks(lines, refs, linemap)
           para[#para + 1] = l
           blocks[#blocks + 1] = {
             t = "heading", level = 2, src_line = start_src,
-            inline = M.parse_inline(table.concat(para, "\n"), refs),
+            inline = M.parse_inline(join_soft(para), refs),
           }
           i = i + 2
           goto cont
@@ -743,7 +782,7 @@ local function parse_blocks(lines, refs, linemap)
     if #para > 0 then
       blocks[#blocks + 1] = {
         t = "paragraph", src_line = start_src,
-        inline = M.parse_inline(table.concat(para, "\n"), refs),
+        inline = M.parse_inline(join_soft(para), refs),
       }
     end
 

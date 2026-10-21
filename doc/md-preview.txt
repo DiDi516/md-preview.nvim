@@ -63,8 +63,9 @@ md-preview.nvim 在 Neovim 内部以分屏方式实时预览 Markdown 渲染结�
 	  refresh_events = { "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" },
 
 	  -- 渲染
-	  show_url = false,		-- 链接后是否附加 URL 文本
-	  image_icon = "▣",		-- 图片占位图标
+  show_url = false,		-- 链接后是否附加 URL 文本
+  image_mode = "auto",		-- 图片呈现方式，见 |md-preview-images|
+  image_icon = "▣",		-- 图片占位图标
 	  code_lang_label = true,	-- 代码块顶部是否显示语言名
 	  code_line_numbers = false,	-- 代码块行号
 	  quote_bar = "▎",		-- 引用块竖条
@@ -131,6 +132,22 @@ H3–H6 ~
 	其他图类型（classDiagram / gantt / pie 等）降级为标注块 + 源码。
 
 ==============================================================================
+图片与徽章						*md-preview-images*
+
+终端显示不了位图，图片按 image_mode 降级：
+
+	auto	（默认）认得出徽章就渲染成彩色标签，其余用 image_icon 占位
+	badge	只认徽章，其余图片不显示
+	icon	一律显示 `▣ alt`，不做徽章识别
+	alt	只显示 alt 文本，不带图标
+	hide	图片完全不出现
+
+徽章识别针对 shields.io / badgen 的 `<label>-<message>-<color>` 规格，
+还原成两段配色的色块（左侧灰色标签 + 右侧徽章色），前景色按背景亮度
+自动取深色或浅色。连续写在同一段的多个徽章会合并排到同一行，
+源码里每个徽章各占一行也不会被拆开。
+
+==============================================================================
 高亮组						*md-preview-highlights*
 
 配色默认跟随 catppuccin 当前 flavour；取不到时使用内置 macchiato 色板。
@@ -164,7 +181,8 @@ H3–H6 ~
 ==============================================================================
 已知限制						*md-preview-limits*
 
-1. 图片无法在终端显示，渲染为 `▣ alt` 占位符。
+1. 位图无法在终端显示，渲染为 `▣ alt` 占位符（见 |md-preview-images|）。
+   shields.io / badgen 徽章是例外，可还原成彩色标签。
 2. 粗体 / 斜体 / 删除线依赖终端能力。Windows Terminal、iTerm2、
    kitty 等现代终端支持；不支持的终端可在 attrs 中关掉，退化为纯颜色。
 3. Mermaid 仅支持 flowchart 与 sequenceDiagram，其余类型保留源码。

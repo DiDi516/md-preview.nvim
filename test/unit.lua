@@ -265,6 +265,62 @@ check("支持语言数量 >= 20", (function()
 end)(), (function() local n = 0 for _ in pairs(codehl.LANGS) do n = n + 1 end return n end)())
 
 --------------------------------------------------------------------------------
+-- 7.5 徽章 / 图片渲染
+--------------------------------------------------------------------------------
+local b1 = render_term.parse_badge("https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white")
+check("badge 解析出文本", b1 and b1.text == "Neovim 0.9+", b1 and b1.text)
+-- hex 统一归一化为小写（CSS / nvim 高亮组均接受小写）
+check("badge 解析出颜色", b1 and b1.color == "57a143", b1 and b1.color)
+
+local b2 = render_term.parse_badge("https://img.shields.io/badge/license-MIT-green")
+check("badge 命名色转 hex", b2 and b2.color == "97ca00", b2 and b2.color)
+
+local b3 = render_term.parse_badge("https://img.shields.io/badge/platform-Windows%20%2F%20Linux%20%2F%20macOS-lightgrey")
+check("badge 解码百分号转义", b3 and b3.text == "platform Windows / Linux / macOS", b3 and b3.text)
+
+local b4 = render_term.parse_badge("https://img.shields.io/badge/a--b-c-blue")
+check("badge 还原转义连字符", b4 and b4.text == "a-b c", b4 and b4.text)
+
+-- badgen.net 用斜杠分隔，同样识别（三段式：label/message/color）
+local b5 = render_term.parse_badge("https://badgen.net/badge/license/MIT/green")
+check("badgen 徽章识别", b5 and b5.text == "license MIT" and b5.color == "97ca00",
+  b5 and (b5.text .. " / " .. b5.color))
+
+check("普通图片不误判为 badge", render_term.parse_badge("https://example.com/arch.png") == nil)
+check("其他站点不误判", render_term.parse_badge("https://example.com/badge/a-b-c-blue") == nil)
+
+-- 徽章渲染为一行内联标签，不再每个占一行
+local badge_md = table.concat({
+  '[![Neovim](https://img.shields.io/badge/Neovim-0.9%2B-57A143)](https://neovim.io)',
+  '[![Lua](https://img.shields.io/badge/Lua-LuaJIT-2C2D72)](https://luajit.org)',
+}, "\n")
+local bast = parse.parse(badge_md)
+local blines = render_term.render(bast, ropts)
+local btext = blines[1] and blines[1].text or ""
+check("多个徽章合并到同一行", #blines == 1, #blines)
+check("徽章文本出现在渲染结果", btext:find("Neovim 0.9+", 1, true) ~= nil, btext)
+check("徽章不叠加链接下划线", (function()
+  for _, sp in ipairs(blines[1].spans) do
+    if sp[3] == "MdPreviewLink" then return false end
+  end
+  return true
+end)(), vim.inspect(blines[1].spans))
+
+-- 窄宽度下徽章整体换行，不从中间被截断
+local nlines = render_term.render(bast, vim.tbl_extend("force", {}, ropts, { width = 30 }))
+local nall = {}
+for _, l in ipairs(nlines) do nall[#nall + 1] = l.text end
+local joined = table.concat(nall, "\n")
+check("窄宽度下徽章不被截断",
+  joined:find("Neovim 0.9+", 1, true) ~= nil and joined:find("Lua LuaJIT", 1, true) ~= nil,
+  vim.inspect(nall))
+
+-- image_mode = hide 时图片完全消失
+local hast = parse.parse("前 ![图](https://example.com/a.png) 后")
+local hlines = render_term.render(hast, vim.tbl_extend("force", {}, ropts, { image_mode = "hide" }))
+check("image_mode=hide 隐藏图片", hlines[1] and hlines[1].text == "前  后", hlines[1] and hlines[1].text)
+
+--------------------------------------------------------------------------------
 -- 8. HTML 导出
 --------------------------------------------------------------------------------
 local html = render_html.render(ast, { cdn = {} }, { title = "测试" })

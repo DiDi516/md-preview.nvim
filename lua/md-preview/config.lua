@@ -18,7 +18,14 @@ M.defaults = {
 
   -- ── 渲染 ──────────────────────────────────────────────
   show_url = false,      -- 链接后是否附加 URL 文本
-  image_icon = "▣",      -- 图片占位图标
+  -- 图片显示方式：
+  --   auto   shields.io 徽章转彩色标签，其余显示 ▣ + 替代文本（默认）
+  --   badge  只把徽章转标签，其余同 icon
+  --   icon   一律显示 ▣ + 替代文本
+  --   alt    只显示替代文本，不带图标
+  --   hide   完全隐藏图片（写纯文字文档时最干净）
+  image_mode = "auto",
+  image_icon = "▣",      -- 图片占位图标（image_mode = auto/icon 时生效）
   code_lang_label = true,-- 代码块顶部是否显示语言名
   code_line_numbers = false,
   quote_bar = "▎",       -- 引用块竖条

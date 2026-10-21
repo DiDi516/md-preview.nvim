@@ -42,12 +42,13 @@ local function newb()
   return { text = "", spans = {} }
 end
 
-local function add(b, s, hl)
+--- @param nobreak boolean|nil 为 true 时该 span 内不允许折行（徽章等原子块）
+local function add(b, s, hl, nobreak)
   if not s or s == "" then return end
   local st = #b.text
   b.text = b.text .. s
   if hl then
-    b.spans[#b.spans + 1] = { st, #b.text, hl }
+    b.spans[#b.spans + 1] = { st, #b.text, hl, nobreak }
   end
 end
 
@@ -81,9 +82,28 @@ end
 -- 折行
 --------------------------------------------------------------------------------
 
---- 按显示宽度折行；\n 视为强制断点，空格优先作为断点，CJK 可任意断
+--- 按显示宽度折行；\n 视为强制断点，空格优先作为断点，CJK 可任意断。
+--- spans 中带 nobreak 标记的区域（徽章）内部不允许折行，只能整体挪到下一行。
 local function wrap(text, spans, width)
   local segs = {}
+
+  -- nobreak[p] = true 表示该字节下标位于「不可断行」区域内
+  local nobreak = {}
+  for _, sp in ipairs(spans or {}) do
+    if sp[4] then
+      for p = sp[1], sp[2] - 1 do nobreak[p] = true end
+    end
+  end
+  --- 从 last_space 往回找第一个「不在 nobreak 区域内的空格」；找不到就就地截断
+  local function pick_break(last_space, i, bs)
+    local cand = last_space
+    while cand and cand >= bs do
+      if text:sub(cand, cand) == " " and not nobreak[cand - 1] then return cand end
+      cand = cand - 1
+    end
+    return i
+  end
+
   if width <= 0 then
     -- 不限制宽度：只按 \n 切分
     local bs = 1
@@ -102,17 +122,20 @@ local function wrap(text, spans, width)
     while i <= n do
       local ch = text:sub(i, i)
       if ch == "\n" then
+        -- 硬换行：强制断行，换行符本身不输出。
+        -- 软换行已在 parse 阶段按「空格 / 直接相连」合并，不会以 \n 出现在这里。
         segs[#segs + 1] = { bs = bs, be = i - 1 }
-        bs, lw, last_space = i + 1, 0, nil
+        bs = i + 1
+        lw, last_space = 0, nil
         i = i + 1
         goto continue
       end
       local cp, nb = util.decode_utf8(text, i)
       if ch == " " then last_space = i end
       if lw + util.char_width(cp) > width and lw > 0 then
-        local brk = last_space or i
+        local brk = pick_break(last_space, i, bs)
         segs[#segs + 1] = { bs = bs, be = brk - 1 }
-        bs = (last_space and last_space + 1) or i
+        bs = brk + 1
         lw, last_space = 0, nil
         i = bs
         goto continue
@@ -141,6 +164,161 @@ local function wrap(text, spans, width)
 end
 
 --------------------------------------------------------------------------------
+-- 图片与徽章
+--------------------------------------------------------------------------------
+
+--- shields.io 的命名色 → hex
+local BADGE_COLORS = {
+  brightgreen = "4c1", green = "97ca00", yellowgreen = "a4a61d",
+  yellow = "dfb317", orange = "fe7d37", red = "e05d44",
+  blue = "007ec6", lightgrey = "9f9f9f", lightgray = "9f9f9f",
+  grey = "555555", gray = "555555",
+  success = "4c1", important = "fe7d37", critical = "e05d44",
+  informational = "007ec6", inactive = "9f9f9f", blueviolet = "8a2be2",
+}
+
+local function url_decode(s)
+  return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
+end
+
+--- 3 位 hex 展开为 6 位
+local function expand_hex(c)
+  if c:match("^%x%x%x$") then
+    return c:sub(1, 1):rep(2) .. c:sub(2, 2):rep(2) .. c:sub(3, 3):rep(2)
+  end
+  return c
+end
+
+local function resolve_badge_color(c)
+  if not c or c == "" then return "6e7681" end
+  c = c:lower()
+  local named = BADGE_COLORS[c]
+  if named then return expand_hex(named) end
+  if c:match("^%x%x%x%x%x%x$") then return c end
+  if c:match("^%x%x%x$") then return expand_hex(c) end
+  return "6e7681"
+end
+
+--- shields.io 徽章左半（label）的默认底色
+local BADGE_LABEL_BG = "555555"
+
+--- 解析 shields.io 徽章 URL → { text, color, label, message }；非徽章返回 nil
+---
+--- 规格：/badge/<label>-<message>-<color>，其中 `--` 表示字面 '-'、`__` 表示 '_'。
+--- 终端无法显示位图，但徽章本质上是「带颜色的文字」，
+--- 转成彩色标签比显示 ▣ 占位符更接近真实观感。
+--- 组装徽章结果（label / message 至少有一个非空）
+local function make_badge(label, message, color)
+  label, message = url_decode(label), url_decode(message)
+  local text
+  if message == "" then text = label
+  elseif label == "" then text = message
+  else text = label .. " " .. message end
+  if text == "" then return nil end
+  return { text = text, color = color, label = label, message = message }
+end
+
+--- shields.io：<label>-<message>-<color>，其中 `--` 表示字面 '-'、`__` 表示 '_'
+local function parse_shields(path)
+  local guarded = path:gsub("%-%-", "\1"):gsub("__", "\2")
+  local segs = {}
+  for s in guarded:gmatch("[^%-]+") do segs[#segs + 1] = s end
+  if #segs < 1 then return nil end
+
+  local function restore(s) return (s:gsub("\1", "-"):gsub("\2", "_")) end
+
+  -- 最后一段是颜色
+  local color = resolve_badge_color(restore(table.remove(segs)))
+  if #segs == 0 then return nil end
+  local label = restore(table.remove(segs, 1))
+  local message = restore(table.concat(segs, "-"))
+  return make_badge(label, message, color)
+end
+
+--- badgen.net：<label>/<message>[/<color>]，斜杠分隔、无转义约定
+local function parse_badgen(path)
+  local segs = {}
+  for s in path:gmatch("[^/]+") do segs[#segs + 1] = s end
+  if #segs < 2 then return nil end
+  -- 三段及以上时最后一段是颜色；只有两段时用 badgen 的默认蓝色
+  local color = resolve_badge_color(#segs >= 3 and table.remove(segs) or "blue")
+  local label = table.remove(segs, 1)
+  return make_badge(label, table.concat(segs, "/"), color)
+end
+
+local function parse_badge(url)
+  if not url then return nil end
+  if url:find("shields.io", 1, true) then
+    local p = url:match("/badge/([^%?#]+)")
+    if not p then return nil end
+    return parse_shields(p)
+  end
+  if url:find("badgen.net", 1, true) then
+    -- badgen 也支持不带 /badge/ 前缀的短形式
+    local p = url:match("/badge/([^%?#]+)") or url:match("^%a+://[^/]+/(.-)/?$")
+    if not p then return nil end
+    return parse_badgen(p)
+  end
+  return nil
+end
+M.parse_badge = parse_badge
+
+--- 按背景色动态创建并缓存徽章高亮组；前景色按亮度自动取深/浅
+local badge_hl_cache = {}
+local function badge_hl(color)
+  local name = "MdPreviewBadge" .. color:upper()
+  if not badge_hl_cache[name] then
+    local r = tonumber(color:sub(1, 2), 16) or 110
+    local g = tonumber(color:sub(3, 4), 16) or 118
+    local b = tonumber(color:sub(5, 6), 16) or 129
+    local lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    local ok = pcall(vim.api.nvim_set_hl, 0, name, {
+      fg = lum > 0.62 and "#1e2030" or "#ffffff",
+      bg = "#" .. color,
+      bold = true,
+    })
+    if not ok then return theme.HL.Image end
+    badge_hl_cache[name] = true
+  end
+  return name
+end
+
+--- 渲染图片节点：徽章 → 彩色标签，其余 → 占位符
+local function render_image_node(b, n, ctx)
+  local mode = ctx.opts.image_mode or "auto"
+  if mode == "hide" then return end
+
+  if mode == "auto" or mode == "badge" then
+    local badge = parse_badge(n.url)
+    if badge then
+      -- 模拟真实徽章的两段配色：左半 label 灰底、右半 message 徽章色。
+      -- 两个相邻的 extmark 各自带底色，拼起来就是一枚「色块标签」。
+      local lab, msg = badge.label or "", badge.message or ""
+      local pre = (#b.text > 0 and b.text:sub(-1) ~= " ") and " " or ""
+      -- nobreak = true：徽章是原子块，不允许从中间折行
+      if lab == "" then
+        add(b, pre .. msg .. " ", badge_hl(badge.color), true)
+      elseif msg == "" then
+        add(b, pre .. lab .. " ", badge_hl(badge.color), true)
+      else
+        add(b, pre .. lab .. " ", badge_hl(BADGE_LABEL_BG), true)
+        add(b, msg .. " ", badge_hl(badge.color), true)
+      end
+      return
+    end
+  end
+
+  local alt = n.alt or ""
+  if alt == "" then alt = n.url:match("([^/%\\]+)$") or n.url end
+  local pre = (#b.text > 0 and b.text:sub(-1) ~= " ") and " " or ""
+  if mode == "alt" then
+    add(b, pre .. alt, theme.HL.Image, true)
+  else
+    add(b, pre .. (ctx.opts.image_icon or "▣") .. " " .. alt, theme.HL.Image, true)
+  end
+end
+
+--------------------------------------------------------------------------------
 -- 行内渲染
 --------------------------------------------------------------------------------
 
@@ -165,21 +343,25 @@ local function render_inline(nodes, ctx, b, mask, in_link)
         b.spans[#b.spans + 1] = { st, #b.text, theme.HL.Mark }
       end
     elseif t == "link" then
-      local st = #b.text
-      -- 继承外层强调（如 **[链接](url)** 需要同时保留粗体）
-      render_inline(n.children, ctx, b, mask, true)
-      if #b.text == st then add(b, n.url, theme.HL.Link) end
-      if ctx.opts.show_url then
-        add(b, " " .. n.url, theme.HL.LinkUrl)
+      -- GitHub README 常见写法 [![alt](badge)](link)：链接内只有一个徽章图片时，
+      -- 直接渲染徽章标签，避免再叠加下划线与 URL 噪音
+      local only = (#n.children == 1) and n.children[1] or nil
+      if only and only.t == "image" and parse_badge(only.url)
+          and (ctx.opts.image_mode or "auto") ~= "hide" then
+        render_image_node(b, only, ctx)
+      else
+        local st = #b.text
+        -- 继承外层强调（如 **[链接](url)** 需要同时保留粗体）
+        render_inline(n.children, ctx, b, mask, true)
+        if #b.text == st then add(b, n.url, theme.HL.Link) end
+        if ctx.opts.show_url then
+          add(b, " " .. n.url, theme.HL.LinkUrl)
+        end
       end
     elseif t == "autolink" then
       add(b, n.url, theme.HL.Link)
     elseif t == "image" then
-      local alt = n.alt or ""
-      if alt == "" then
-        alt = n.url:match("([^/%\\]+)$") or n.url
-      end
-      add(b, (ctx.opts.image_icon or "▣") .. " " .. alt, theme.HL.Image)
+      render_image_node(b, n, ctx)
     elseif t == "math" then
       add(b, mathr.convert(n.value), theme.HL.Math)
     elseif t == "footnote_ref" then
