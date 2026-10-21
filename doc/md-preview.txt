@@ -1,0 +1,176 @@
+*md-preview.txt*	终端内 Markdown 实时预览
+
+==============================================================================
+目录						*md-preview-contents*
+
+    简介 ·········································|md-preview-intro|
+    命令 ·········································|md-preview-commands|
+    配置 ·········································|md-preview-config|
+    渲染效果 ·····································|md-preview-render|
+    高亮组 ·······································|md-preview-highlights|
+    已知限制 ·····································|md-preview-limits|
+
+==============================================================================
+简介						*md-preview-intro*
+
+md-preview.nvim 在 Neovim 内部以分屏方式实时预览 Markdown 渲染结果。
+纯 Lua 实现，不依赖 Node、Python 或浏览器。
+
+样式通过 extmark 施加到只读 scratch buffer 上，因此：
+  · 不需要外部进程，跨机器复制目录即可使用
+  · 预览窗口为普通 vim 窗口，可用所有窗口命令操作
+  · 双向滚动同步：编辑时预览跟随，浏览预览时源光标跟随
+
+注意：本插件不绑定任何按键映射，只提供命令。
+
+==============================================================================
+命令						*md-preview-commands*
+
+:MdPreviewToggle					*:MdPreviewToggle*
+	开关预览窗口。最常用。
+
+:MdPreviewStart						*:MdPreviewStart*
+	启动预览。当前文件类型必须属于 |md-preview-config| 中的 filetypes。
+
+:MdPreviewStop						*:MdPreviewStop*
+	关闭预览窗口并清理相关资源。
+
+:MdPreviewRefresh					*:MdPreviewRefresh*
+	立即重新渲染一次（正常情况下会自动刷新，无需手动调用）。
+
+:MdPreviewExport [路径]					*:MdPreviewExport*
+	导出当前文档为自包含 HTML 文件（内嵌 CSS，默认不引 CDN）。
+	省略路径时写到源文件同名的 .html。
+
+如需快捷键请自行绑定，例如： >
+	vim.keymap.set("n", "<leader>mp", "<cmd>MdPreviewToggle<cr>")
+<
+
+==============================================================================
+配置						*md-preview-config*
+
+在 lazy.nvim 的 config 中调用 setup()。完整默认值与含义： >
+
+	require("md-preview").setup({
+	  -- 窗口
+	  position = "right",		-- right | left | above | below
+	  size = 0.5,			-- 预览窗口占比 0.0~1.0
+	  auto_start = false,		-- 打开 markdown 时自动启动
+	  auto_close = true,		-- 源文件关闭时自动关闭预览
+
+	  -- 刷新
+	  debounce = 200,		-- 文本变更后的防抖毫秒数
+	  refresh_events = { "TextChanged", "TextChangedI", "InsertLeave", "BufWritePost" },
+
+	  -- 渲染
+	  show_url = false,		-- 链接后是否附加 URL 文本
+	  image_icon = "▣",		-- 图片占位图标
+	  code_lang_label = true,	-- 代码块顶部是否显示语言名
+	  code_line_numbers = false,	-- 代码块行号
+	  quote_bar = "▎",		-- 引用块竖条
+	  todo_done = "[✓]",		-- 已完成任务标记
+	  todo_pending = "[ ]",		-- 未完成任务标记
+	  heading_markers = { "", "", "▍", "▎", "·", "·" },  -- H3~H6 前缀
+	  max_width = 0,		-- 渲染最大宽度，0 = 跟随预览窗口
+
+	  -- 滚动同步
+	  scroll_sync = true,		-- 源 → 预览
+	  scroll_sync_reverse = true,	-- 预览 → 源
+	  sync_mode = "topline",		-- topline（顶部对齐）| cursor（光标行对齐）
+
+	  -- 终端能力：老旧终端不支持时关掉对应属性
+	  attrs = { bold = true, italic = true, underline = true, strikethrough = true },
+
+	  filetypes = { "markdown", "md", "mdx", "rmd", "qmd" },
+
+	  -- 导出
+	  export = {
+	    cdn = { katex = false, mermaid = false, highlight = false },
+	    extra_css = nil,
+	    title = nil,		-- 默认取文件名
+	  },
+
+	  highlights = {},		-- 覆盖高亮组，见 |md-preview-highlights|
+	})
+<
+
+==============================================================================
+渲染效果						*md-preview-render*
+
+H1 / H2 ~
+	彩色粗体，并分别在标题上方 / 下方加 `━` / `─` 装饰线。
+
+H3–H6 ~
+	逐级不同的颜色，前缀依次为 ▍ ▎ · ·
+
+强调 ~
+	**粗体**、*斜体*、~~删除线~~、==高亮== 分别使用终端的
+	bold / italic / strikethrough / 反显。终端不支持时自动退化为纯色。
+
+代码块 ~
+	Unicode 边框，顶部标注语言名，内部按 20+ 语言的词法规则着色
+	（关键字、字符串、注释、数字、函数名、类型等）。
+
+表格 ~
+	真 Unicode 制表符（┌─┬─┐），列宽按**显示宽度**计算，
+	中英文混排也能对齐；支持 :--- ---: :-: 三种对齐。
+
+列表 ~
+	无序用 • ◦ ▪（按嵌套层级轮换），有序保留原始编号，
+	任务列表显示 [✓] / [ ]，支持任意层级嵌套。
+
+数学公式 ~
+	行内 $...$ 与块级 $$...$$ 均转换为 Unicode 近似：
+	希腊字母、∑ ∫ ∞ ≤ 等符号，^2 → 上标，_i → 下标，
+	\frac{a}{b} → a⁄b，\sqrt{x} → √(x)，矩阵用框线渲染。
+	无法识别的命令原样保留。
+
+	Mermaid ~
+	flowchart / graph 按分层布局渲染为字符画（支持 TD / LR 等方向），
+	sequenceDiagram 渲染为参与者生命线 + 消息箭头。
+	其他图类型（classDiagram / gantt / pie 等）降级为标注块 + 源码。
+
+==============================================================================
+高亮组						*md-preview-highlights*
+
+配色默认跟随 catppuccin 当前 flavour；取不到时使用内置 macchiato 色板。
+终端不支持真彩时自动降级为 xterm-256 近似色。
+
+主要高亮组：
+	MdPreviewH1 … MdPreviewH6	各级标题
+	MdPreviewH1Bar / H2Bar		标题装饰线
+	MdPreviewEmphB/I/BI/S/BS/IS/BIS	粗斜删除线的 7 种组合
+	MdPreviewMark			==高亮==
+	MdPreviewInlineCode		行内代码
+	MdPreviewCodeBlock / CodeBorder / CodeLang / CodeLineNr
+	MdPreviewQuote / QuoteBar
+	MdPreviewBullet / OrdMarker / TodoDone / TodoPending
+	MdPreviewTableBorder / TableHead / TableCell
+	MdPreviewHr
+	MdPreviewLink / LinkB / LinkI / LinkBI / LinkUrl
+	MdPreviewImage
+	MdPreviewMath / MathBlock
+	MdPreviewMermaid
+	MdPreviewFootnote / HtmlTag
+	MdPreviewKeyword / Comment / String / Number / Func / Operator
+	  / Type / Punct / Constant / Variable	代码词法着色
+
+覆盖方式（在 setup 的 highlights 中指定）： >
+	highlights = {
+	  MdPreviewH1 = { fg = "#ff0000", bold = true },
+	}
+<
+
+==============================================================================
+已知限制						*md-preview-limits*
+
+1. 图片无法在终端显示，渲染为 `▣ alt` 占位符。
+2. 粗体 / 斜体 / 删除线依赖终端能力。Windows Terminal、iTerm2、
+   kitty 等现代终端支持；不支持的终端可在 attrs 中关掉，退化为纯颜色。
+3. Mermaid 仅支持 flowchart 与 sequenceDiagram，其余类型保留源码。
+4. 极端边缘的 Markdown 语法（如深层嵌套的 HTML 块）可能解析不精确，
+   此时按纯文本处理，不会报错。
+5. 预览窗口为只读 buffer，在其中编辑不会写回源文件。
+
+==============================================================================
+ vim:tw=78:ts=8:noet:ft=help:norl:
