@@ -328,10 +328,13 @@ lua/md-preview/
 ```bash
 nvim --headless -c "set rtp+=." -c "luafile test/unit.lua" -c "q"
 nvim --headless -c "set columns=160 lines=48" -c "luafile test/ui.lua" -c "q!"
+nvim --headless -c "set columns=180 lines=60" -c "luafile test/check_readme.lua" -c "q!"
 ```
 
 - `test/unit.lua`——解析、渲染、数学、Mermaid、代码高亮、HTML 导出（46 项断言）
 - `test/ui.lua`——窗口创建、extmark 施加、滚动同步映射、导出文件（27 项）
+- `test/check_readme.lua`——校验 README 里的效果展示与真实渲染逐字符一致
+  （README 声称展示的是未修饰的真实输出，改渲染逻辑后靠它防止展示失真）
 
 ---
 
