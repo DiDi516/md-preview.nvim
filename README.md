@@ -137,7 +137,7 @@ Neovim 0.9+  Lua LuaJIT  platform Windows / Linux / macOS  license MIT
 
 ```lua
 {
-  "runtu/md-preview.nvim",
+  "DiDi516/md-preview.nvim",
   ft = { "markdown", "md" },
   cmd = {
     "MdPreviewStart", "MdPreviewStop", "MdPreviewToggle",
@@ -162,7 +162,7 @@ end
 
 ```lua
 use {
-  "runtu/md-preview.nvim",
+  "DiDi516/md-preview.nvim",
   ft = { "markdown", "md" },
   config = function() require("md-preview").setup() end,
 }
@@ -171,14 +171,14 @@ use {
 ### vim-plug
 
 ```vim
-Plug 'runtu/md-preview.nvim'
+Plug 'DiDi516/md-preview.nvim'
 " 之后在 init.lua 中调用 require("md-preview").setup()
 ```
 
 ### 手动
 
 ```bash
-git clone https://github.com/runtu/md-preview.nvim \
+git clone https://github.com/DiDi516/md-preview.nvim \
   ~/.local/share/nvim/site/pack/plugins/start/md-preview.nvim
 ```
 
@@ -391,4 +391,4 @@ nvim --headless -c "set columns=180 lines=60" -c "luafile test/check_readme.lua"
 
 ## 协议
 
-[MIT](LICENSE) © 2026 runtu
+[MIT](LICENSE) © 2026 DiDi516
