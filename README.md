@@ -13,11 +13,10 @@
 
 ## 效果
 
-![左侧 Markdown 源码，右侧实时预览](assets/preview.jpg)
+![md-preview.nvim 实时预览演示：左边写、右边看](assets/mdpreview.gif)
 
-左边写、右边看。以下是逐项截取的**真实渲染输出**（Windows Terminal + Neovim 0.12.4，
-catppuccin macchiato 主题），未做任何修饰。想自己看，打开 `test/demo.md`
-执行 `:MdPreviewToggle` 即可。
+左写右看，改一个字预览立刻跟着变。以下是逐项截取的**真实渲染输出**，未做任何修饰。
+想自己看，打开 `test/demo.md` 执行 `:MdPreviewToggle` 即可。
 
 **表格**按显示宽度对齐，中英混排不错位；**代码块**带 Unicode 边框与词法着色：
 
