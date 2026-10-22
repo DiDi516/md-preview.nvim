@@ -265,6 +265,29 @@ check("支持语言数量 >= 20", (function()
 end)(), (function() local n = 0 for _ in pairs(codehl.LANGS) do n = n + 1 end return n end)())
 
 --------------------------------------------------------------------------------
+-- 7.4 软换行（CommonMark 段落内换行）
+--------------------------------------------------------------------------------
+local function para_text(md)
+  local ast = parse.parse(md)
+  local ls = render_term.render(ast, ropts)
+  local out = {}
+  for _, l in ipairs(ls) do out[#out + 1] = l.text end
+  return table.concat(out, "\n")
+end
+
+-- 英文单词之间必须有空格，否则会粘连
+check("软换行：英文补空格", para_text("long\nparagraph") == "long paragraph", para_text("long\nparagraph"))
+-- 纯中文之间不该凭空多出空格
+check("软换行：中文不补空格", para_text("这是一段\n中文说明") == "这是一段中文说明", para_text("这是一段\n中文说明"))
+-- 全角标点后面接半角字母也不该补空格（否则 "0.12.4， catppuccin"）
+check("软换行：全角标点后不补空格",
+  para_text("版本 0.12.4，\ncatppuccin 主题") == "版本 0.12.4，catppuccin 主题",
+  para_text("版本 0.12.4，\ncatppuccin 主题"))
+-- 硬换行（行尾双空格）仍然要断行
+check("硬换行：行尾双空格断行", para_text("第一行  \n第二行") == "第一行\n第二行",
+  vim.inspect(para_text("第一行  \n第二行")))
+
+--------------------------------------------------------------------------------
 -- 7.5 徽章 / 图片渲染
 --------------------------------------------------------------------------------
 local b1 = render_term.parse_badge("https://img.shields.io/badge/Neovim-0.9%2B-57A143?logo=neovim&logoColor=white")

@@ -13,8 +13,11 @@
 
 ## 效果
 
-以下全部是**真实渲染输出**（Windows Terminal + Neovim 0.12.4 实测截取，未做修饰）。
-想自己看，打开 `test/demo.md` 执行 `:MdPreviewToggle` 即可。
+![左侧 Markdown 源码，右侧实时预览](assets/preview.jpg)
+
+左边写、右边看。以下是逐项截取的**真实渲染输出**（Windows Terminal + Neovim 0.12.4，
+catppuccin macchiato 主题），未做任何修饰。想自己看，打开 `test/demo.md`
+执行 `:MdPreviewToggle` 即可。
 
 **表格**按显示宽度对齐，中英混排不错位；**代码块**带 Unicode 边框与词法着色：
 

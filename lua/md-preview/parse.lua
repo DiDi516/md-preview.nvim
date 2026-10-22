@@ -452,25 +452,51 @@ local function first_char(s)
   return t:sub(st, st + nb - 1)
 end
 
+--- 全角标点：其后接半角字母时也不该补空格（"0.12.4，catppuccin" 而非 "0.12.4， catppuccin"）
+local FULLWIDTH_PUNCT = {}
+for _, c in ipairs({ "，", "。", "、", "；", "：", "！", "？", "）", "】", "』",
+                     "」", "》", "〉", "…", "—", "～", "·", "　" }) do
+  FULLWIDTH_PUNCT[c] = true
+end
+
+--- 行尾硬换行标记：两个及以上空格，或一个未转义的反斜杠
+--- @return string 去掉标记后的行, boolean 是否硬换行
+local function strip_hard_break(l)
+  if l:match("  +$") then return (l:gsub("%s+$", "")), true end
+  if l:sub(-1) == "\\" and l:sub(-2, -2) ~= "\\" then return l:sub(1, -2), true end
+  return l, false
+end
+
 --- 合并段落内的多行（软换行处理）
 ---
 --- CommonMark 规定段落内的单个换行是「软换行」，渲染时不产生硬换行，
---- 等价于一个空格。但中文等全角字符之间不该凭空多出空格，所以按两侧字符决定：
----   · 两侧都是全角（中文/全角标点）→ 直接相连，不插空格
----   · 其余（英文单词、中英混排、标点后）→ 插一个空格
+--- 等价于一个空格。但中文排版不该凭空多出空格，所以按两侧字符决定：
+---   · 前一个字符是全角标点 → 直接相连，不插空格
+---   · 两侧都是全角（中文/全角字符）→ 直接相连，不插空格
+---   · 其余（英文单词、中英混排）→ 插一个空格
 ---
---- 注意：这里刻意不往正文里塞 "\n"。渲染层的 "\n" 只表示硬换行（行尾双空格 / <br>），
---- 软换行若也用 "\n" 会让每个源码行各占一行，徽章等行内元素就无法合并排版。
+--- 行尾双空格 / 反斜杠是**硬换行**，保留 "\n" 交给渲染层强制断行。
+--- 其余情况刻意不往正文里塞 "\n"：软换行若也用 "\n" 会让每个源码行各占一行，
+--- 徽章等行内元素就无法合并排版。
 local function join_soft(lines)
   local out = {}
   for i, l in ipairs(lines) do
-    out[#out + 1] = l
     if i < #lines then
-      local prev = last_char(l)
-      local nxt = first_char(lines[i + 1])
-      local both_fullwidth = prev ~= "" and nxt ~= ""
-        and util.width(prev) == 2 and util.width(nxt) == 2
-      if not both_fullwidth then out[#out + 1] = " " end
+      local stripped, hard = strip_hard_break(l)
+      if hard then
+        out[#out + 1] = stripped
+        out[#out + 1] = "\n"
+      else
+        out[#out + 1] = l
+        local prev = last_char(l)
+        local nxt = first_char(lines[i + 1])
+        local no_space = prev == "" or nxt == ""
+          or FULLWIDTH_PUNCT[prev]
+          or (util.width(prev) == 2 and util.width(nxt) == 2)
+        if not no_space then out[#out + 1] = " " end
+      end
+    else
+      out[#out + 1] = l
     end
   end
   return table.concat(out)

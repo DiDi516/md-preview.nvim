@@ -72,6 +72,27 @@ verify("代码块", code)
 verify("徽章行", badges)
 verify("图片占位", icon)
 
+-- README 引用的本地图片（如 assets/preview.jpg）必须真实存在且非空，
+-- 否则 GitHub 上会挂一个裂图，而本地又看不出来
+for path in readme:gmatch("!%[[^%]]*%]%(([^%s%)]+)%)") do
+  if not path:match("^%a+://") then
+    local fh = io.open(ROOT .. "/" .. path, "rb")
+    if not fh then
+      print(string.format("[缺失]   本地图片: %s", path))
+      bad = bad + 1
+    else
+      local size = fh:seek("end")
+      fh:close()
+      if not size or size == 0 then
+        print(string.format("[空文件] 本地图片: %s", path))
+        bad = bad + 1
+      else
+        print(string.format("[存在]   本地图片: %s (%d KB)", path, math.floor(size / 1024)))
+      end
+    end
+  end
+end
+
 print("")
 if bad == 0 then
   print("===== README 效果展示与真实渲染逐字符一致 =====")
